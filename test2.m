@@ -1,112 +1,114 @@
 clear; clc;
 
-%% Geometry and Grid
-L = 1.0;   % Length (m)
-W = 0.5;   % Width (m)
-H = 0.5;   % Height (m)
+%% Geometry
+L = 1.0;   
+W = 0.5;   
+H = 0.5;
 
-Nx = 40; Ny = 40; Nz = 40;   % Grid resolution
-dx = L/(Nx-1); dy = W/(Ny-1); dz = H/(Nz-1);
+Nx = 40; Ny = 40; Nz = 40;
 
-%% Material Properties
-k = 0.8;   % Thermal conductivity (W/mK)
-T_ambient = 300; % Ambient temperature (K)
+dx = L/(Nx-1); 
+dy = W/(Ny-1); 
+dz = H/(Nz-1);
 
-%% Wall Layers (multi-layer insulation)
-t1 = 0.05;   k1 = 0; %1.5;   % refractory
-t2 = 0.10;   k2 = 0; %0.2;   % insulation
-t3 = 0.005;  k3 = 0; %16;    % steel shell
+%% Ambient
+T_ambient = 300;
 
-R_wall = t1/k1 + t2/k2 + t3/k3;
-h_wall = 1 / R_wall;     % effective heat transfer coefficient
+%% Initialize temperature
+T = ones(Nx,Ny,Nz)*T_ambient;
 
-%% Boundary Conditions
-T_left   = 1200;
-T_right  = 1200;
-T_top    = 300;    
-T_bottom = 300;
-T_front  = 300;    % Door side (cold spot) &  Insulated wall
-T_back   = 300;
+%% Conductivity field
+k_field = ones(Nx,Ny,Nz)*0.8; % chamber gas
 
-%% Initialize Temperature Field
-T = ones(Nx,Ny,Nz) * T_ambient;
+% material properties
+k_steel = 16;
+k_insulation = 0.2;
 
-% Apply boundary conditions
-T(2,:,:)   = T_left;
-T(end-1,:,:) = T_right;
-T(:,2,:)   = T_front;
-T(:,end-1,:) = T_back;
-T(:,:,2)   = T_bottom;
-T(:,:,end-1) = T_top;
+%% Define layered walls
 
-%% Iterative Solver (Gauss-Seidel)
+% outer steel shell
+k_field(1,:,:) = k_steel;
+k_field(end,:,:) = k_steel;
+k_field(:,1,:) = k_steel;
+k_field(:,end,:) = k_steel;
+k_field(:,:,1) = k_steel;
+k_field(:,:,end) = k_steel;
+
+% insulation layer
+k_field(2,:,:) = k_insulation;
+k_field(end-1,:,:) = k_insulation;
+k_field(:,2,:) = k_insulation;
+k_field(:,end-1,:) = k_insulation;
+k_field(:,:,2) = k_insulation;
+k_field(:,:,end-1) = k_insulation;
+
+%% Heater layer (fixed temperature)
+
+heater_temp = 1200;
+
+T(3,:,:) = heater_temp;
+T(end-2,:,:) = heater_temp;
+
+T(:,3,:) = heater_temp;
+T(:,end-2,:) = heater_temp;
+
+T(:,:,3) = heater_temp;
+T(:,:,end-2) = heater_temp;
+
+%% Door opening (cold boundary)
+
+T(:,2,:) = 300;
+
+%% Solver parameters
 max_iter = 5000;
 tol = 1e-6;
 
 for iter = 1:max_iter
+
     T_old = T;
 
-    for i = 3:Nx-2
-        for j = 3:Ny-2
-            for k_idx = 3:Nz-2
+    for i = 4:Nx-3
+        for j = 4:Ny-3
+            for k_idx = 4:Nz-3
 
                 T(i,j,k_idx) = ( ...
                     T(i+1,j,k_idx) + T(i-1,j,k_idx) + ...
                     T(i,j+1,k_idx) + T(i,j-1,k_idx) + ...
-                    T(i,j,k_idx+1) + T(i,j,k_idx-1) ) / 6;
+                    T(i,j,k_idx+1) + T(i,j,k_idx-1) )/6;
 
             end
         end
     end
 
-    %% Wall conduction heat loss
-    for j = 2:Ny-1
-        for k_idx = 2:Nz-1
+    % keep heater nodes fixed
+    T(3,:,:) = heater_temp;
+    T(end-2,:,:) = heater_temp;
 
-            % left wall
-            T(1,j,k_idx) = T(3,j,k_idx) - dx*h_wall/k*(T(3,j,k_idx)-T_ambient);
+    T(:,3,:) = heater_temp;
+    T(:,end-2,:) = heater_temp;
 
-            % right wall
-            T(Nx,j,k_idx) = T(Nx-2,j,k_idx) - dx*h_wall/k*(T(Nx-2,j,k_idx)-T_ambient);
+    T(:,:,3) = heater_temp;
+    T(:,:,end-2) = heater_temp;
 
-        end
-    end
-
-    for i = 2:Nx-1
-        for k_idx = 2:Nz-1
-
-            % front wall
-            T(i,1,k_idx) = T(i,3,k_idx) - dy*h_wall/k*(T(i,3,k_idx)-T_ambient);
-
-            % back wall
-            T(i,Ny,k_idx) = T(i,Ny-2,k_idx) - dy*h_wall/k*(T(i,Ny-2,k_idx)-T_ambient);
-
-        end
-    end
-
-    for i = 2:Nx-1
-        for j = 2:Ny-1
-
-            % bottom wall
-            T(i,j,1) = T(i,j,3) - dz*h_wall/k*(T(i,j,3)-T_ambient);
-
-            % top wall
-            T(i,j,Nz) = T(i,j,Nz-2) - dz*h_wall/k*(T(i,j,Nz-2)-T_ambient);
-
-        end
-    end
-
-    % convergence check
+    % convergence
     if max(abs(T(:)-T_old(:))) < tol
-        disp(['Converged at iteration ', num2str(iter)]);
-        break;
+        disp(['Converged at iteration ',num2str(iter)])
+        break
     end
 
 end
 
 %% Visualization
+
 [X,Y,Z] = meshgrid(linspace(0,L,Nx), linspace(0,W,Ny), linspace(0,H,Nz));
-slice(X,Y,Z,T, [L/2], [W/2], [H/2]); % mid-plane slices
-colorbar;
-xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
-title('3D Furnace Temperature Distribution');
+
+slice(X,Y,Z,T,[L/2],[W/2],[H/2])
+
+%colormap hot
+colorbar
+
+xlabel('X (m)')
+ylabel('Y (m)')
+zlabel('Z (m)')
+
+title('3D Furnace Temperature Distribution')
