@@ -9,7 +9,7 @@ Nx = 40; Ny = 40; Nz = 40;   % Grid resolution
 dx = L/(Nx-1); dy = W/(Ny-1); dz = H/(Nz-1);
 
 %% Material Properties
-k = 0.8;   % Thermal conductivity (W/mK)
+k = ;   % Thermal conductivity (W/mK)
 T_ambient = 300; % Ambient temperature (K)
 
 %% Wall Layers (multi-layer insulation)
