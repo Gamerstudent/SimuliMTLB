@@ -65,20 +65,53 @@ while err > tol && iter < max_iter
     iter = iter + 1;
 end
 
-%% 5. Visualization
+%% 5. Final Fixed Visualization (Data Permutation Method)
 fprintf('Converged in %d iterations.\n', iter);
 
-[X, Y, Z] = meshgrid(linspace(0,W,Ny), linspace(0,L,Nx), linspace(0,H,Nz));
-figure('Color', 'w');
-slice_x = L/2; slice_y = W/2; slice_z = H/2;
-s = slice(X, Y, Z, T, [0 L], [W/2], [0]);
-set(s, 'EdgeColor', 'none', 'FaceAlpha', 0.8);
+% 1. Permute T so that dimensions match MATLAB's [Y, X, Z] meshgrid expectation
+% Original T is [Nx, Ny, Nz]. We want [Ny, Nx, Nz]
+T_plot = permute(T, [2, 1, 3]);
 
-%colormap('hot');
-colorbar;
-title('3D Steady-State Thermal Map of Muffle Furnace');
-xlabel('Length (m) -> Door at end');
-ylabel('Width (m)');
-zlabel('Height (m)');
-view(3);
+% 2. Create the grid based on the NEW dimensions of T_plot
+% meshgrid(x, y, z) returns arrays where:
+% dim1 = length(y), dim2 = length(x), dim3 = length(z)
+[X, Y, Z] = meshgrid(linspace(0, L, Nx), linspace(0, W, Ny), linspace(0, H, Nz));
+
+figure('Color', 'w', 'Position', [100, 100, 900, 600]);
+
+% 3. Slicing
+% Note: We slice using the actual coordinate values
+slice_pos_x = [0.05, L/2, L-0.02]; 
+slice_pos_y = W/2;
+slice_pos_z = H/2;
+
+% Use T_plot here
+s = slice(X, Y, Z, T_plot, slice_pos_x, slice_pos_y, slice_pos_z);
+set(s, 'EdgeColor', 'none', 'FaceAlpha', 0.7); 
+
+% 4. Adding the "Heat Core" (Isosurface)
+hold on;
+T_core = min(T_plot(:)) + 0.85*(max(T_plot(:)) - min(T_plot(:))); 
+fv = isosurface(X, Y, Z, T_plot, T_core);
+if ~isempty(fv.vertices)
+    p = patch(fv);
+    p.FaceColor = 'red';
+    p.EdgeColor = 'none';
+    p.FaceAlpha = 0.3;
+end
+
+% Aesthetics
+camlight right;      
+lighting gouraud;    
+colormap('turbo'); 
+cb = colorbar;
+ylabel(cb, 'Temperature (K)');
+title({'Muffle Furnace Thermal Map'; 'Note: Temperature drop toward door (X-max)'});
+
+xlabel('Length (X)'); 
+ylabel('Width (Y)'); 
+zlabel('Height (Z)');
+
+view(3); 
 grid on;
+axis tight;
